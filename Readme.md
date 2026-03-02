@@ -57,7 +57,7 @@ The app displays GPS tracks from JSON log files and provides overlay panels show
 
 ### Requirements
 - **Visual Studio 2022** or newer (with Blazor WebAssembly workload)
-- .NET 8.0 SDK (or latest compatible)
+- .NET 9.0 (or latest compatible)
 - Git (for cloning repository)
 
 ### Running Locally
