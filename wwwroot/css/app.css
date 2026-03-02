@@ -1,0 +1,26 @@
+﻿.processing-bar {
+    width: 20%;
+    height: 10px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.processing-bar-inner {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #007bff 25%, #00c6ff 50%, #007bff 75%);
+    background-size: 200% 100%;
+    animation: processing 1s linear infinite;
+}
+
+@keyframes processing {
+    0% {
+        transform: translateX(-50%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}

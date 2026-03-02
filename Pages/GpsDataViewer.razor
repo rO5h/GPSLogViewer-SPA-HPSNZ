@@ -1,0 +1,294 @@
+﻿@page "/"
+@inject GPSDataRenderer.Services.IDataService DataService
+@using GPSDataRenderer.Models
+@using GPSDataRenderer.Components
+
+@using LeafletForBlazor
+@using LeafletForBlazor.Components;
+
+
+<h3>GPS Log Viewer</h3>
+
+@if(isStreamingLogValues)
+{
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <p>Streaming log values: @processedSamples</p>
+        
+        <div class="processing-bar">
+            <div class="processing-bar-inner"></div>
+        </div>
+
+    </div>
+
+}else
+{
+    <p>Total values loaded: @processedSamples </p>   
+}
+<p>Time taken: @String.Format("{0:F1}", totalProcessingTimeUTC.TotalMinutes) minutes</p>
+
+
+<div style="position: relative; width: 100%; height: 500px;">
+    <!-- Max Table Component -->
+    <MaxValuesTable SOG="@maxSOG" VMG="@maxVMG" HR="@maxHR" />
+
+    <!-- Leaflet Map -->
+    <RealTimeMap @ref="realTimeMap"
+    Height="500px"
+    Width="100%"
+    Parameters="@mapParams"
+    OnAfterMapLoaded="OnLeafletMapInitialized">
+    </RealTimeMap>
+</div>
+
+@code {
+    private double maxSOG = 0;
+    private double maxVMG = 0;
+    private double maxHR = 0;
+
+    private int processedSamples = 0;
+    private bool isStreamingLogValues;
+    private TimeSpan totalProcessingTimeUTC;
+
+
+    private RealTimeMap realTimeMap = new();
+    private RealTimeMap.LoadParameters mapParams =new(); 
+    private double[]? _lastPoint;
+
+
+    //Easy toggle between exercise and sample file
+    private string logFilePath = "static-data/birdyfirsh-exercise-rover-102.json";
+    private string exampleLogFilePath = "static-data/example-data.json";
+
+    //marker
+    private RealTimeMap.StreamPoint? sogPoint;
+    private RealTimeMap.StreamPoint? vmgPoint;
+    private RealTimeMap.StreamPoint? hrPoint;
+
+    //column index to map from log file
+    private int latIdx = 0;
+    private int lonIdx = 0;
+    private int sogIdx = 0;
+    private int vmgIdx = 0;
+    private int hrIdx = 0;
+
+
+    protected override void OnInitialized()
+    {
+        InitLeafletMap();       
+        StateHasChanged();
+    }
+
+    private void InitLeafletMap()
+    {
+        //map parameters
+        mapParams = new RealTimeMap.LoadParameters()
+            {
+                zoomLevel = 13,           
+                location = new RealTimeMap.Location()
+                {
+                // Hardcoded to Auckland for demo purpose
+                    latitude = -36.79620,
+                    longitude = 174.81167
+                }, 
+                
+                //setting map constraints
+                basemap = new RealTimeMap.Basemap
+                {
+                    basemapLayers = new List<RealTimeMap.BasemapLayer>
+                    {
+                         new RealTimeMap.BasemapLayer
+                         {
+                             url = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                             minZoom =13,
+                             maxZoom =18                             
+                         }
+                    }
+                }
+            };
+
+
+        //max value pointer parameter
+        sogPoint = new RealTimeMap.StreamPoint()
+            {
+                guid = Guid.NewGuid(),
+                type = "MaxSOG",
+                value = "SOG",
+                latitude = -36.79620,
+                longitude = 174.81167,
+
+            };
+
+        vmgPoint = new RealTimeMap.StreamPoint()
+            {
+                guid = Guid.NewGuid(),
+                type = "MaxVMG",
+                value = "VMG",
+                latitude = -36.79620,
+                longitude = 174.81167
+            };
+
+        hrPoint = new RealTimeMap.StreamPoint()
+            {
+                guid = Guid.NewGuid(),
+                type = "MaxHR",
+                value = "HR",
+                latitude = -36.79620,
+                longitude = 174.81167
+            };
+    }
+
+    private async Task OnLeafletMapInitialized(RealTimeMap.MapEventArgs args)
+    {
+        isStreamingLogValues = true;
+        await LoadAndRenderTrackAsync();
+        isStreamingLogValues = false;
+
+        await RenderMaxValuePoints();
+    }
+
+
+
+    private async Task LoadAndRenderTrackAsync()
+    {
+        _lastPoint = null;
+        var renderBuffer = new List<double[]>();
+        int renderThreshold = 5000;        
+
+        var gpsStream = await DataService.GetGpsStreamAsync(logFilePath);
+        latIdx = gpsStream.ColumnMap["Lat"];
+        lonIdx = gpsStream.ColumnMap["Lon"];
+        sogIdx = gpsStream.ColumnMap["SOG"];
+        vmgIdx = gpsStream.ColumnMap["VMG"];
+        hrIdx = gpsStream.ColumnMap["HR_20223"];
+        
+        var processingStartTime = DateTimeOffset.UtcNow;       
+
+        await foreach (var batch in gpsStream.Batches)
+        {
+            foreach (var row in batch)
+            {
+                SetMaxValue(row);
+
+                processedSamples++;
+
+                // add lat and lon for map 
+                renderBuffer.Add(new double[] { row[latIdx], row[lonIdx] });
+            }
+
+            //Only hit the Map API when we have enough data i.e. "Send in Batches"
+            if (renderBuffer.Count >= renderThreshold)
+            {
+                await DrawBufferToMap(renderBuffer);
+                renderBuffer.Clear();
+
+                totalProcessingTimeUTC = DateTimeOffset.Now - processingStartTime;
+
+                StateHasChanged();               
+                await Task.Delay(10);
+
+            }
+        }
+
+        // Send remaining leftover data
+        if (renderBuffer.Count > 0)
+        {
+            await DrawBufferToMap(renderBuffer);           
+        }
+
+        totalProcessingTimeUTC = DateTimeOffset.Now - processingStartTime;
+    }
+
+    //leafletforBlazor API
+    private async Task DrawBufferToMap(List<double[]> buffer)
+    {
+        int rowCount = buffer.Count;
+        if (_lastPoint != null) rowCount++;
+
+        double[,] coords = new double[rowCount, 2];
+        int offset = 0;
+
+        if (_lastPoint != null)
+        {
+            coords[0, 0] = _lastPoint[0];
+            coords[0, 1] = _lastPoint[1];
+            offset = 1;
+        }
+
+        for (int i = 0; i < buffer.Count; i++)
+        {
+            coords[i + offset, 0] = buffer[i][0];
+            coords[i + offset, 1] = buffer[i][1];
+        }
+        
+        await realTimeMap.Geometric.DisplayPolylinesFromArray.addConnector(coords);
+
+        //stitching point for the next draw
+        _lastPoint = new double[] { coords[rowCount - 1, 0], coords[rowCount - 1, 1] };
+    }
+
+
+    private void SetMaxValue(double[]row)
+    {
+        if(row[sogIdx]>maxSOG)
+        {
+            maxSOG = row[sogIdx];
+            sogPoint!.latitude = row[latIdx];
+            sogPoint.longitude = row[lonIdx];
+            sogPoint.value = maxSOG;
+        }
+
+        if (row[vmgIdx] > maxVMG)
+        {
+            maxVMG = row[vmgIdx];
+
+            vmgPoint!.latitude = row[latIdx];
+            vmgPoint.longitude = row[lonIdx];
+            vmgPoint.value = maxVMG;
+        }
+
+
+        if (row[hrIdx] > maxHR)
+        {
+            maxHR = row[hrIdx];
+
+            hrPoint!.latitude = row[latIdx];
+            hrPoint.longitude = row[lonIdx];
+            hrPoint.value = maxHR;
+        }      
+    }
+
+
+    //Max points, visual feedback on leafletforblazor
+    private async Task RenderMaxValuePoints()
+    {
+        realTimeMap.Geometric.Points.AppearanceOnType(p => p.type == "MaxSOG").pattern = new RealTimeMap.PointSymbol()
+        {
+            radius = 8,
+            color = "#008000", //green
+            fillColor = "#66cc66",
+            weight = 2,
+            fillOpacity = 0.9
+        };
+
+        realTimeMap.Geometric.Points.AppearanceOnType(p => p.type == "MaxVMG").pattern = new RealTimeMap.PointSymbol()
+                {
+                    radius = 8,
+                    color = "#0000ff", //blue
+                    fillColor = "#6666ff",
+                    weight = 2,
+                    fillOpacity = 0.9
+                };
+
+        realTimeMap.Geometric.Points.AppearanceOnType(p => p.type == "MaxHR").pattern = new RealTimeMap.PointSymbol()
+                {
+                    radius = 8,
+                    color = "#ff0000", //red
+                    fillColor = "#ff6666",
+                    weight = 2,
+                    fillOpacity = 0.9
+                };
+
+        await realTimeMap.Geometric.Points.upload(new List<RealTimeMap.StreamPoint> { sogPoint!, vmgPoint!, hrPoint! },true);
+    }
+
+}

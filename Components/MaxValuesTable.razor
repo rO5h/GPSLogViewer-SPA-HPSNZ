@@ -1,0 +1,33 @@
+﻿@namespace GPSDataRenderer.Components
+
+<div style="position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.85);
+            border-radius: 8px; padding: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 1000;">
+    <table style="border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="padding: 4px 8px; border-bottom: 1px solid #ccc;">Metric</th>
+                <th style="padding: 4px 8px; border-bottom: 1px solid #ccc;">Maximum</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 4px 8px; color:#008000">Speed Over Ground (SOG)</td>
+                <td style="padding: 4px 8px; color:#008000">@SOG</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 8px;color:#0000ff">Velocity Made Good (VMG)</td>
+                <td style="padding: 4px 8px;color:#0000ff">@VMG</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 8px; color:#ff0000">Heart Rate (HR)</td>
+                <td style="padding: 4px 8px; color:#ff0000">@HR</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public double SOG { get; set; }
+    [Parameter] public double VMG { get; set; }
+    [Parameter] public double HR { get; set; }
+}
