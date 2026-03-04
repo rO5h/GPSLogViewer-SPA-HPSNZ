@@ -38,15 +38,15 @@ The app displays GPS tracks from JSON log file and provides overlay table showin
    - Extremely fast, low-allocation.  
    - Synchronous only, cannot stream asynchronously in Blazor/WebAssembly.
 
-4. **Custom Async Streaming Parser (current solution)**  
-   - Batch-deserializes only the needed data.  
-   - Smooth, low-memory streaming in Blazor/WebAssembly.  
-   - Handles very large JSON files efficiently.
-   - Not very efficient solution but safer bet.
-
-5. **Multi-threading | web worker | Background task**
+4.  **Multi-threading | web worker | Background task**
     - Not fully supported by blazor wasm unfortunately.
 
+5. **Custom Async Streaming Parser (current solution)**  
+   - Batch-deserializes only the needed data.  
+   - Smooth, low-memory streaming in Blazor/WebAssembly.  
+   - Handles very large JSON files easily.
+   - Not very efficient solution because of string builder and reading each character but a safer solution compared to other options.
+     
 
 ### DOM & Rendering
 - The DOM size keeps increasing as polylines are added to Leaflet.
